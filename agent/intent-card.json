@@ -1,0 +1,66 @@
+{
+  "schema": "autobuilder.intent_card.v1",
+  "prd_source": "/home/jsy/wintermute/autobuilder/PRD-cadence-substrate.md",
+  "root_motivation": "Land the smallest filesystem-substrate that makes the laptop's five reflective tools (daily-receipt, confidant, letters-we-never-sent, conversations-zine, memory-reliquary) composable across the daily→weekly→monthly→quarterly→annual pyramid, without rewriting any of them. Substrate-only: tier-wiring belongs to follow-on bind PRDs.",
+  "user_persona": "jsy on the wintermute laptop, where five reflective-artifact tools already exist as Rust binaries under ~/wintermute/ but produce isolated outputs that no upstream consumer can enumerate by tier. The cadence CLI is used by both the user (manual record/list/latest) and by extended versions of the five tools (bind PRDs that shell out to `cadence record`).",
+  "unfakeable_metric": {
+    "name": "acceptance_tests_passing",
+    "lower_is_better": false,
+    "harness_command": "cargo test --release --quiet 2>&1 | tail -1",
+    "target": 11
+  },
+  "acceptance_criteria": [
+    { "id": "AC1",  "level": "MUST",  "description": "cargo install --path . installs binary `cadence` to ~/.local/bin/; `cadence --version` reports 0.1.0.",                                                                                          "test": "tests/acceptance_ac1_install_version.rs" },
+    { "id": "AC2",  "level": "MUST",  "description": "`cadence where` on a fresh laptop creates ~/.claude/cadence/ and reports counts of 0 across all tiers.",                                                                                          "test": "tests/acceptance_ac2_where_init.rs" },
+    { "id": "AC3",  "level": "MUST",  "description": "`cadence register daily-receipt --tier daily` records the tool in manifest.json under tools[].name == 'daily-receipt'.",                                                                          "test": "tests/acceptance_ac3_register.rs" },
+    { "id": "AC4",  "level": "MUST",  "description": "`cadence record daily --produced-by daily-receipt --path /tmp/test.escpos --summary 'manual test'` creates a record file at ~/.claude/cadence/daily/$(date +%Y-%m-%d)/<ulid>.json and prints the ulid to stdout.", "test": "tests/acceptance_ac4_record_daily.rs" },
+    { "id": "AC5",  "level": "MUST",  "description": "`cadence list daily --json | jq -r '.[].id'` includes the ulid from AC4.",                                                                                                                        "test": "tests/acceptance_ac5_list_includes.rs" },
+    { "id": "AC6",  "level": "MUST",  "description": "`cadence latest daily --produced-by daily-receipt --json | jq -r '.path'` returns the path from AC4.",                                                                                            "test": "tests/acceptance_ac6_latest_path.rs" },
+    { "id": "AC7",  "level": "MUST",  "description": "`cadence list daily --since 7d --json` returns only records whose produced_at is within the last 7 days.",                                                                                        "test": "tests/acceptance_ac7_since_filter.rs" },
+    { "id": "AC8",  "level": "MUST",  "description": "`cadence record weekly --produced-by confidant --path /tmp/w.md --sources <ulid>` correctly records sources: ['<ulid>'] and the file lands under ~/.claude/cadence/weekly/$(date +%Y-W%V)/<ulid>.json.", "test": "tests/acceptance_ac8_weekly_sources.rs" },
+    { "id": "AC9",  "level": "MUST",  "description": "cargo test --release green; lib + integration suite.",                                                                                                                                            "test": "metric: acceptance_tests_passing == 11" },
+    { "id": "AC10", "level": "MUST",  "description": "`cadence record` is append-only — two records on the same day by the same tool both persist; `latest` returns the newer one.",                                                                    "test": "tests/acceptance_ac10_append_only.rs" },
+    { "id": "AC11", "level": "SHOULD","description": "Repo has a CHANGELOG.md with a ## v0.1.0 section enumerating the four primary subcommands and the directory schema.",                                                                              "test": "tests/acceptance_ac11_changelog.rs" }
+  ],
+  "scope": [
+    "Single Rust binary `cadence` (clap derive CLI).",
+    "Subcommands: register, record, list, latest, where.",
+    "Filesystem substrate at $CADENCE_HOME (default ~/.claude/cadence/) with daily/weekly/monthly/quarterly/annual buckets.",
+    "JSON record schema with ulid id, tier, period, produced_by, produced_at, path, sources, summary, meta.",
+    "Period derivation: daily=YYYY-MM-DD, weekly=YYYY-Www (ISO 8601), monthly=YYYY-MM, quarterly=YYYY-Q[1-4], annual=YYYY.",
+    "manifest.json tracking registered tools and tier defaults."
+  ],
+  "non_goals": [
+    "Tier-wiring of the five reflective tools (deferred to bind PRDs).",
+    "`cadence pulse` (PRD-cadence-pulse.md).",
+    "Fleet-2 surfaces: `cadence thread`, `cadence deck`, `cadence share`.",
+    "Indexing or full-text search over summary fields.",
+    "Garbage collection or pruning of old records.",
+    "Network egress: substrate is purely local filesystem, no HTTP."
+  ],
+  "hard_constraints": {
+    "rust_edition": "2024",
+    "target_kind": "cli",
+    "deny_unsafe": true,
+    "max_deps": 10,
+    "msrv": "1.85",
+    "additional": {
+      "binary_name": "cadence",
+      "default_home_env": "CADENCE_HOME",
+      "default_home_path": "~/.claude/cadence",
+      "publish_repo": "j0yen/cadence"
+    }
+  },
+  "five_whys_trace": [
+    { "why": 1, "q": "Why ship a substrate now?", "a": "Five reflective-artifact tools exist on this laptop and produce time-bucketed outputs, but no consumer can enumerate 'what dailies do I have this week' to feed the weekly tier." },
+    { "why": 2, "q": "Why does that matter — the tools are individually useful.", "a": "The pyramid only earns its name if a higher tier composes from the lower; otherwise it's five independent tools sharing aesthetic, not architecture." },
+    { "why": 3, "q": "Why not have each tool track its own siblings?", "a": "Per-tool tracking pushes coupling into five places and forces five version bumps for any schema change; a shared substrate centralizes it once." },
+    { "why": 4, "q": "Why a CLI rather than a library?", "a": "Each tool is already its own binary with its own dependency tree; shell-out to `cadence record …` keeps the substrate decoupled and the bind PRDs trivial (one new dep: nothing)." }
+  ],
+  "ambiguities_resolved": [
+    { "question": "PRD lists `register` in the CLI but doesn't enumerate it among the 'four primary subcommands' in AC11.", "resolution": "Treat register as setup-time and document the four primary verbs (record, list, latest, where) plus register as a setup helper in CHANGELOG." },
+    { "question": "PRD says crate name `cadence` collides with one published Rust crate.", "resolution": "publish = false in Cargo.toml; local install via cargo install --path . only. Publishing to crates.io is out of scope." }
+  ],
+  "created_at": "2026-05-28T15:58:30Z",
+  "intent_slug": "cadence"
+}
