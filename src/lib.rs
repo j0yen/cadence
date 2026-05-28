@@ -1,8 +1,20 @@
-//! cadence — autobuilder-scaffolded library.
+//! cadence — shared time-pyramid record store.
 //!
-//! Generated stub. The edit-agent replaces this body across iterations.
-//!
-//! When `target_kind == cli`, this file is overwritten or removed by the
-//! scaffold step. When `target_kind == lib`, this is the primary surface.
+//! Substrate for the laptop's reflective-artifact tools (daily-receipt,
+//! confidant, letters-we-never-sent, conversations-zine, memory-reliquary).
+//! Records are flat JSON files under `$CADENCE_HOME/<tier>/<period>/<ulid>.json`,
+//! with a manifest at `$CADENCE_HOME/manifest.json` tracking registered tools.
 
 #![cfg_attr(not(test), forbid(unsafe_code))]
+
+pub mod home;
+pub mod manifest;
+pub mod period;
+pub mod record;
+pub mod store;
+
+pub use home::resolve_home;
+pub use manifest::{Manifest, ToolEntry};
+pub use period::{derive_period, parse_since, Tier};
+pub use record::Record;
+pub use store::{latest, list, record as record_store, register, where_stats, ListFilter, WhereStats};
