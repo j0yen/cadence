@@ -1,5 +1,46 @@
 # cadence — changelog
 
+## v0.2.0
+
+Adds the `pulse` subcommand: a one-command per-tier overdue readout that
+consumes the substrate records written by v0.1.0 tools.
+
+### New: `cadence pulse`
+
+- `cadence pulse` — human-readable table showing tier, last-produced
+  timestamp, expected cadence, and status (`ok` / `overdue: Xd` /
+  `overdue: never`). Overdue rows print in red when stdout is a TTY.
+- `cadence pulse --json` — machine-readable JSON array (or single object
+  with `--tier`). Each element includes `tier`, `last_produced_at`,
+  `age_days`, `cadence_days`, `overdue_after_days`,
+  `overdue_delta_days`, and `status`.
+- `cadence pulse --hook` — terse, one-line-per-overdue-tier output to
+  stderr, suitable for `SessionStart` hook injection. Nothing on stdout.
+- `cadence pulse --tier <daily|weekly|monthly|quarterly|annual>` — single
+  tier view.
+- `cadence pulse --quiet` — no output; communicate only via exit code.
+
+Exit codes: `0` = all current; `1..=5` = number of overdue tiers;
+`127` = substrate not initialized.
+
+Default overdue thresholds (configurable via `tiers.<name>` in
+`manifest.json`):
+
+| Tier      | cadence | overdue_after |
+|-----------|---------|---------------|
+| daily     | 1d      | 2d            |
+| weekly    | 7d      | 14d           |
+| monthly   | 30d     | 60d           |
+| quarterly | 92d     | 184d          |
+| annual    | 365d    | 730d          |
+
+### New: `scripts/cadence-pulse-hook.sh`
+
+Shell helper that wraps `cadence pulse --hook` for easy `SessionStart`
+integration. See the script's header for the one-line install snippet.
+
+---
+
 ## v0.1.0
 
 Foundational substrate. Single Rust binary `cadence` with four primary

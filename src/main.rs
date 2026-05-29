@@ -4,12 +4,13 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use std::collections::BTreeMap;
+use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use cadence::{
-    latest, list, parse_since, record_store, register, resolve_home, where_stats,
-    ListFilter, Tier,
+    home_initialized, latest, list, overdue_count, parse_since, pulse_all, pulse_tier,
+    read_manifest, record_store, register, resolve_home, where_stats, ListFilter, PulseRow, Tier,
 };
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
@@ -92,6 +93,26 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Report which tiers are overdue: last-produced, expected cadence, status.
+    ///
+    /// Exit code equals the number of overdue tiers (0 = all current), or 127
+    /// if the substrate has not been initialized.
+    Pulse {
+        /// Emit JSON instead of human-readable text. With `--tier`, emits a
+        /// single object; otherwise an array of per-tier objects.
+        #[arg(long)]
+        json: bool,
+        /// Terse one-line-per-overdue-tier output to stderr, for SessionStart
+        /// hooks. Nothing on stdout; exit code still equals overdue count.
+        #[arg(long)]
+        hook: bool,
+        /// Restrict the readout to a single tier.
+        #[arg(long)]
+        tier: Option<Tier>,
+        /// Suppress all output; communicate only via exit code.
+        #[arg(long)]
+        quiet: bool,
+    },
 }
 
 fn parse_kv(s: &str) -> Result<(String, String), String> {
@@ -104,7 +125,7 @@ fn parse_kv(s: &str) -> Result<(String, String), String> {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(cli) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => ExitCode::from(code),
         Err(e) => {
             eprintln!("cadence: error: {e:#}");
             ExitCode::from(1)
@@ -112,7 +133,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(cli: Cli) -> Result<()> {
+fn run(cli: Cli) -> Result<u8> {
     let home = resolve_home().context("resolve CADENCE_HOME")?;
     match cli.cmd {
         Cmd::Register { name, tier } => {
@@ -223,6 +244,98 @@ fn run(cli: Cli) -> Result<()> {
                 }
             }
         }
+        Cmd::Pulse {
+            json,
+            hook,
+            tier,
+            quiet,
+        } => {
+            return pulse_cmd(&home, json, hook, tier, quiet);
+        }
     }
-    Ok(())
+    Ok(0)
+}
+
+/// Implements `cadence pulse`. Exit code equals the number of overdue tiers
+/// (`0..=5`), or `127` when the substrate home does not yet exist.
+fn pulse_cmd(
+    home: &std::path::Path,
+    json: bool,
+    hook: bool,
+    tier: Option<Tier>,
+    quiet: bool,
+) -> Result<u8> {
+    if !home_initialized(home) {
+        return Ok(127);
+    }
+    let manifest = read_manifest(home).context("read manifest")?;
+    let now = Utc::now();
+    let single = tier.is_some();
+    let rows = match tier {
+        Some(t) => vec![pulse_tier(home, &manifest, t, now)?],
+        None => pulse_all(home, &manifest, now)?,
+    };
+    let code = overdue_count(&rows);
+
+    if quiet {
+        return Ok(code);
+    }
+    if hook {
+        for r in rows.iter().filter(|r| r.is_overdue()) {
+            let when = match r.age_days {
+                Some(d) => format!("{d}d ago"),
+                None => "never".to_string(),
+            };
+            eprintln!(
+                "cadence: {} overdue (last produced {}, expected every {}d)",
+                r.tier, when, r.cadence_days
+            );
+        }
+        return Ok(code);
+    }
+    if json {
+        let out = match (single, rows.first()) {
+            (true, Some(row)) => serde_json::to_string_pretty(row).context("serialize pulse")?,
+            _ => serde_json::to_string_pretty(&rows).context("serialize pulse")?,
+        };
+        println!("{out}");
+        return Ok(code);
+    }
+    print_pulse_table(&rows);
+    Ok(code)
+}
+
+/// Render the human-readable per-tier pulse table. Overdue rows print in red
+/// when stdout is a TTY.
+fn print_pulse_table(rows: &[PulseRow]) {
+    let color = std::io::stdout().is_terminal();
+    println!(
+        "{:<11} {:<26} {:<12} {}",
+        "Tier", "Last produced", "Expected", "Status"
+    );
+    println!("{}", "─".repeat(62));
+    for r in rows {
+        let last = match (r.last_produced_at, r.age_days) {
+            (Some(at), Some(0)) => format!("{} (today)", at.format("%Y-%m-%d")),
+            (Some(at), Some(d)) => format!("{} ({d}d ago)", at.format("%Y-%m-%d")),
+            _ => "never".to_string(),
+        };
+        let expected = format!("every {}d", r.cadence_days);
+        let status = if r.last_produced_at.is_none() {
+            "overdue: never".to_string()
+        } else if r.is_overdue() {
+            match r.overdue_delta_days {
+                Some(d) => format!("overdue: {d}d"),
+                None => "overdue".to_string(),
+            }
+        } else {
+            "ok".to_string()
+        };
+        let line = format!("{:<11} {last:<26} {expected:<12} {status}", r.tier);
+        if color && r.is_overdue() {
+            println!("\x1b[31m{line}\x1b[0m");
+        } else {
+            println!("{line}");
+        }
+    }
 }

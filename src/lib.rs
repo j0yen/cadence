@@ -10,11 +10,16 @@
 pub mod home;
 pub mod manifest;
 pub mod period;
+pub mod pulse;
 pub mod record;
 pub mod store;
 
 pub use home::resolve_home;
-pub use manifest::{Manifest, ToolEntry};
+pub use manifest::{Manifest, TierConfig, ToolEntry};
 pub use period::{derive_period, parse_since, Tier};
+pub use pulse::{home_initialized, overdue_count, pulse_all, pulse_tier, PulseRow};
 pub use record::Record;
-pub use store::{latest, list, record as record_store, register, where_stats, ListFilter, WhereStats};
+pub use store::{
+    latest, list, read_manifest, record as record_store, register, where_stats, ListFilter,
+    WhereStats,
+};

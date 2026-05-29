@@ -64,6 +64,26 @@ fn manifest_path(home: &Path) -> PathBuf {
     home.join("manifest.json")
 }
 
+/// Read the manifest without creating the home directory.
+///
+/// Returns [`Manifest::default`] when no manifest file exists. Unlike
+/// [`ensure_home`], this never writes to disk — it is the read path used by
+/// the `pulse` readout, which must not mutate the substrate.
+///
+/// # Errors
+/// Errors only if an existing manifest file cannot be opened or parsed.
+pub fn read_manifest(home: &Path) -> Result<Manifest> {
+    let mp = manifest_path(home);
+    if mp.exists() {
+        let f = File::open(&mp).with_context(|| format!("open {}", mp.display()))?;
+        let m: Manifest = serde_json::from_reader(BufReader::new(f))
+            .with_context(|| format!("parse {}", mp.display()))?;
+        Ok(m)
+    } else {
+        Ok(Manifest::default())
+    }
+}
+
 fn write_manifest(home: &Path, m: &Manifest) -> Result<()> {
     let mp = manifest_path(home);
     let tmp = mp.with_extension("json.tmp");
