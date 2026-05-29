@@ -26,6 +26,10 @@ is `~/.claude/cadence/` (override via `CADENCE_HOME`); records land
 under `<tier>/<period>/<ulid>.json` where `<period>` is the calendar
 bucket for the tier (e.g. `daily/2026-05-28/`, `weekly/2026-W22/`).
 
+## Recent
+
+- **v0.2.0** — `cadence pulse`: per-tier overdue readout with `--json`, `--hook`, `--tier`, `--quiet`; `scripts/cadence-pulse-hook.sh` for SessionStart integration. Exit code = number of overdue tiers.
+
 ## Install
 
 ```sh
