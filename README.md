@@ -1,42 +1,34 @@
-# cadence — the shared time-pyramid record store
+# cadence
 
-This laptop has five reflective-artifact tools at five time horizons —
-`daily-receipt`, `confidant`, `letters-we-never-sent`,
-`conversations-zine`, `memory-reliquary` — and none of them compose.
-The blocker is that no shared record store exists where "I produced a
-daily artifact today" can be looked up by "what daily records do I have
-for this week?". `cadence` is that store: a small Rust CLI with
-`record`, `list`, `latest`, `register`, and `where` subcommands over a
-`~/.claude/cadence/` directory layout. Foundational only — no tier
-wiring happens here; the per-tool binds come in follow-on PRDs.
+A record store for recurring artifacts across five time horizons — daily, weekly, monthly, quarterly, annual. A tool that produces something on a schedule records the fact here; anything can then ask "what daily records do I have this week?" or "which tiers are overdue?" without knowing where the artifacts live.
+
+## Why it exists
+
+Several reflective-artifact tools run at different horizons — a daily receipt, a weekly digest, and so on — and they don't compose, because there's no shared place to record "I produced a daily artifact today" that another step can query by period. cadence is that shared layer: each tool writes one record per artifact, and the time-pyramid (daily rolls up to weekly, weekly to monthly) becomes something you can query instead of reconstruct. It is the record store, not the scheduler — it tracks what was produced and when; it does not produce or trigger anything itself.
 
 ## Commands
 
 ```
-cadence register <name> --tier <tier>   # declare a tool's intent to record
+cadence register <name> --tier <tier>   # declare a tool's intent to record under a tier
 cadence record <tier> --produced-by <tool> --path <p> [--summary ...] [--sources ...]
 cadence list <tier> [--since 7d] [--period ...] [--produced-by ...] [--json]
 cadence latest <tier> [--produced-by <tool>] [--json]
-cadence where                           # print $CADENCE_HOME + per-tier counts
+cadence pulse [--tier <tier>] [--json] [--hook] [--quiet]   # which tiers are overdue
+cadence where [--json]                   # print $CADENCE_HOME + per-tier counts
 ```
 
-Records are **append-only**: two records on the same day by the same
-tool both persist; `latest` returns the newer one. The substrate root
-is `~/.claude/cadence/` (override via `CADENCE_HOME`); records land
-under `<tier>/<period>/<ulid>.json` where `<period>` is the calendar
-bucket for the tier (e.g. `daily/2026-05-28/`, `weekly/2026-W22/`).
+Tiers are `daily | weekly | monthly | quarterly | annual`.
 
-## Recent
+Records are **append-only**: two records on the same day by the same tool both persist, and `latest` returns the newer one. The substrate root is `~/.claude/cadence/` (override via `CADENCE_HOME`); records land under `<tier>/<period>/<ulid>.json`, where `<period>` is the calendar bucket for the tier — `daily/2026-05-28/`, `weekly/2026-W22/`, `quarterly/2026-Q2/`, and so on.
 
-- **v0.2.0** — `cadence pulse`: per-tier overdue readout with `--json`, `--hook`, `--tier`, `--quiet`; `scripts/cadence-pulse-hook.sh` for SessionStart integration. Exit code = number of overdue tiers.
+`pulse` reports each tier's last-produced time against its expected cadence and exits with the number of overdue tiers (`127` if the substrate isn't initialized yet). `--hook` makes it terse and stderr-only for a SessionStart hook — `scripts/cadence-pulse-hook.sh` wires that up; `--quiet` drops all output and speaks only through the exit code.
 
 ## Install
 
 ```sh
 cargo install --path .
-# installs the `cadence` binary to ~/.cargo/bin (or ~/.local/bin via
-# the build skill's install -Dm755 step)
-cadence --version   # 0.1.0
+# installs `cadence` to ~/.cargo/bin
+cadence --version   # 0.2.0
 cadence where       # creates ~/.claude/cadence/ on first run
 ```
 
